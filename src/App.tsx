@@ -16,7 +16,7 @@ export function App() {
   const [outputText, setOutputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [shouldConfusify, setShouldConfusify] = useState(false);
-  const [tokenCount, setTokenCount] = useState(1000000);
+  const [tokenCount, setTokenCount] = useState(30000);
 
   // Function to copy text to clipboard
   const copyToClipboard = () => {
