@@ -18,17 +18,17 @@ export async function insertZeroWidthChars(
   );
   const numGaps = gapIndices.length;
 
-  // Calculate distribution of zero-width chars
+  // Calculate distribution of zero-width chars - total targetTokens distributed across all gaps
   const zwcPerGap = Math.floor(targetTokens / numGaps);
   const remainder = targetTokens % numGaps;
 
   // Generate a string of random zero-width characters
-  const generateZwcString = (n: number): string => {
+  function generateZwcString(n: number): string {
     return Array.from(
       { length: n },
       () => ZWC_CHARS[Math.floor(Math.random() * ZWC_CHARS.length)]
     ).join("");
-  };
+  }
 
   // Insert zero-width characters into each gap
   for (let i = 0; i < gapIndices.length; i++) {
