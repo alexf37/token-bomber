@@ -1,44 +1,119 @@
 /**
- * Inserts zero-width characters into whitespace of a string
+ * Inserts zero-width characters between alphabetical characters and in spaces
  * @param originalText - The text to process
  * @param targetTokens - Number of zero-width characters to insert (default: 1,000,000)
- * @returns Text with zero-width characters inserted into whitespace
+ * @returns Text with zero-width characters inserted between alphabetical characters and in spaces
  */
 export async function insertZeroWidthChars(
   originalText: string,
   targetTokens: number = 1_000_000
 ): Promise<string> {
-  const ZWC_CHARS = ["\u200b", "\u200c", "\u200d", "\ufeff", "\u2060"];
+  const ZWC_CHARS = [
+    "\u200b",
+    "\u200c",
+    "\u200d",
+    "\ufeff",
+    "\u2060",
+    "\u00ad",
+  ];
 
-  // Split text into content and whitespace parts
-  const parts = originalText.split(/(\s+)/);
-  const gapIndices = Array.from(
-    { length: Math.floor(parts.length / 2) },
-    (_, i) => i * 2 + 1
-  );
-  const numGaps = gapIndices.length;
+  // Special markdown characters that should not have ZWCs before them at line start
+  const MARKDOWN_CHARS = [
+    "#",
+    "-",
+    "*",
+    ">",
+    "`",
+    "|",
+    ":",
+    "[",
+    "]",
+    "(",
+    ")",
+    "!",
+    "_",
+    "~",
+    "=",
+    "\\",
+  ];
 
-  // Calculate distribution of zero-width chars - total targetTokens distributed across all gaps
-  const zwcPerGap = Math.floor(targetTokens / numGaps);
-  const remainder = targetTokens % numGaps;
+  // Split text into lines and process each line
+  const lines = originalText.split("\n");
+  const processedLines = lines.map((line) => {
+    // Skip empty lines
+    if (!line.trim()) return line;
 
-  // Generate a string of random zero-width characters
-  function generateZwcString(n: number): string {
-    return Array.from(
-      { length: n },
-      () => ZWC_CHARS[Math.floor(Math.random() * ZWC_CHARS.length)]
-    ).join("");
-  }
+    // Check if line starts with a markdown character
+    const firstChar = line.trim()[0];
+    const isMarkdownLine = MARKDOWN_CHARS.includes(firstChar);
 
-  // Insert zero-width characters into each gap
-  for (let i = 0; i < gapIndices.length; i++) {
-    const gapIndex = gapIndices[i];
-    const count = zwcPerGap + (i < remainder ? 1 : 0);
-    const zwcString = generateZwcString(count);
-    parts[gapIndex] = parts[gapIndex] + zwcString;
-  }
+    // Split text into parts, keeping alphabetical characters and spaces separate
+    const parts: string[] = [];
+    let currentPart = "";
 
-  return parts.join("");
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const isLetter = /[a-zA-Z]/.test(char);
+      const isSpace = /\s/.test(char);
+
+      if (isLetter || isSpace) {
+        if (currentPart) {
+          parts.push(currentPart);
+          currentPart = "";
+        }
+        parts.push(char);
+      } else {
+        currentPart += char;
+      }
+    }
+
+    if (currentPart) {
+      parts.push(currentPart);
+    }
+
+    // Calculate distribution of zero-width chars
+    const numGaps = Math.max(
+      0,
+      parts.filter((part) => /[a-zA-Z]/.test(part) || /\s/.test(part)).length -
+        1
+    );
+    if (numGaps === 0) return line;
+
+    const zwcPerGap = Math.floor(targetTokens / numGaps);
+    const remainder = targetTokens % numGaps;
+
+    // Generate a string of random zero-width characters
+    function generateZwcString(n: number): string {
+      return Array.from(
+        { length: n },
+        () => ZWC_CHARS[Math.floor(Math.random() * ZWC_CHARS.length)]
+      ).join("");
+    }
+
+    // Insert zero-width characters between alphabetical characters and in spaces
+    const result: string[] = [];
+    let gapCount = 0;
+
+    for (let i = 0; i < parts.length; i++) {
+      result.push(parts[i]);
+      if (
+        i < parts.length - 1 &&
+        (/[a-zA-Z]/.test(parts[i]) || /\s/.test(parts[i])) &&
+        (/[a-zA-Z]/.test(parts[i + 1]) || /\s/.test(parts[i + 1]))
+      ) {
+        // Skip inserting ZWC if this is a markdown line and we're at the start
+        if (isMarkdownLine && i === 0) continue;
+
+        const count = zwcPerGap + (gapCount < remainder ? 1 : 0);
+        result.push(generateZwcString(count));
+        gapCount++;
+      }
+    }
+
+    return result.join("");
+  });
+
+  return processedLines.join("\n");
 }
 
 const asciiToUnicodeMap: Record<string, string> = {
@@ -73,8 +148,20 @@ const asciiToUnicodeMap: Record<string, string> = {
 };
 
 export function confusify(input: string): string {
-  return input
-    .split("")
-    .map((char) => asciiToUnicodeMap[char] ?? char)
+  // Split the string into parts, preserving URLs
+  const parts = input.split(/(https?:\/\/[^\s]+)/g);
+
+  return parts
+    .map((part) => {
+      // If the part is a URL, return it unchanged
+      if (part.startsWith("http")) {
+        return part;
+      }
+      // Otherwise confusify it
+      return part
+        .split("")
+        .map((char) => asciiToUnicodeMap[char] ?? char)
+        .join("");
+    })
     .join("");
 }
