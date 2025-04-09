@@ -1,21 +1,14 @@
 /**
- * Inserts zero-width characters between alphabetical characters and in spaces
+ * Inserts zero-width characters into spaces of a string
  * @param originalText - The text to process
  * @param targetTokens - Number of zero-width characters to insert (default: 1,000,000)
- * @returns Text with zero-width characters inserted between alphabetical characters and in spaces
+ * @returns Text with zero-width characters inserted into spaces
  */
 export async function insertZeroWidthChars(
   originalText: string,
   targetTokens: number = 1_000_000
 ): Promise<string> {
-  const ZWC_CHARS = [
-    "\u200b",
-    "\u200c",
-    "\u200d",
-    "\ufeff",
-    "\u2060",
-    "\u00ad",
-  ];
+  const ZWC_CHARS = ["\u200b", "\u200c", "\u200d", "\ufeff", "\u2060"];
 
   // Special markdown characters that should not have ZWCs before them at line start
   const MARKDOWN_CHARS = [
@@ -37,80 +30,68 @@ export async function insertZeroWidthChars(
     "\\",
   ];
 
-  // Split text into lines and process each line
+  // First, count total number of gaps across all lines
   const lines = originalText.split("\n");
-  const processedLines = lines.map((line) => {
-    // Skip empty lines
-    if (!line.trim()) return line;
+  let totalGaps = 0;
+  const lineGaps: number[] = [];
 
-    // Check if line starts with a markdown character
+  for (const line of lines) {
+    if (!line.trim()) {
+      lineGaps.push(0);
+      continue;
+    }
+
     const firstChar = line.trim()[0];
     const isMarkdownLine = MARKDOWN_CHARS.includes(firstChar);
+    const parts = line.split(/(\s+)/);
+    const numGaps = Math.floor(parts.length / 2);
 
-    // Split text into parts, keeping alphabetical characters and spaces separate
-    const parts: string[] = [];
-    let currentPart = "";
+    // If it's a markdown line, subtract one gap from the count
+    const adjustedGaps = isMarkdownLine ? Math.max(0, numGaps - 1) : numGaps;
+    lineGaps.push(adjustedGaps);
+    totalGaps += adjustedGaps;
+  }
 
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const isLetter = /[a-zA-Z]/.test(char);
-      const isSpace = /\s/.test(char);
+  if (totalGaps === 0) return originalText;
 
-      if (isLetter || isSpace) {
-        if (currentPart) {
-          parts.push(currentPart);
-          currentPart = "";
-        }
-        parts.push(char);
-      } else {
-        currentPart += char;
-      }
-    }
+  // Calculate distribution for the entire file
+  const zwcPerGap = Math.floor(targetTokens / totalGaps);
+  const remainder = targetTokens % totalGaps;
 
-    if (currentPart) {
-      parts.push(currentPart);
-    }
+  // Generate a string of random zero-width characters
+  function generateZwcString(n: number): string {
+    return Array.from(
+      { length: n },
+      () => ZWC_CHARS[Math.floor(Math.random() * ZWC_CHARS.length)]
+    ).join("");
+  }
 
-    // Calculate distribution of zero-width chars
-    const numGaps = Math.max(
-      0,
-      parts.filter((part) => /[a-zA-Z]/.test(part) || /\s/.test(part)).length -
-        1
-    );
+  // Process each line with the correct token distribution
+  let remainingTokens = remainder;
+  const processedLines = lines.map((line, lineIndex) => {
+    if (!line.trim()) return line;
+
+    const firstChar = line.trim()[0];
+    const isMarkdownLine = MARKDOWN_CHARS.includes(firstChar);
+    const parts = line.split(/(\s+)/);
+    const numGaps = Math.floor(parts.length / 2);
+
     if (numGaps === 0) return line;
 
-    const zwcPerGap = Math.floor(targetTokens / numGaps);
-    const remainder = targetTokens % numGaps;
+    // Calculate how many extra tokens this line gets from the remainder
+    const lineRemainder = Math.min(remainingTokens, lineGaps[lineIndex]);
+    remainingTokens -= lineRemainder;
 
-    // Generate a string of random zero-width characters
-    function generateZwcString(n: number): string {
-      return Array.from(
-        { length: n },
-        () => ZWC_CHARS[Math.floor(Math.random() * ZWC_CHARS.length)]
-      ).join("");
+    // Insert zero-width characters into spaces
+    for (let i = 1; i < parts.length; i += 2) {
+      if (isMarkdownLine && i === 1) continue;
+
+      const gapIndex = Math.floor(i / 2);
+      const count = zwcPerGap + (gapIndex < lineRemainder ? 1 : 0);
+      parts[i] = parts[i] + generateZwcString(count);
     }
 
-    // Insert zero-width characters between alphabetical characters and in spaces
-    const result: string[] = [];
-    let gapCount = 0;
-
-    for (let i = 0; i < parts.length; i++) {
-      result.push(parts[i]);
-      if (
-        i < parts.length - 1 &&
-        (/[a-zA-Z]/.test(parts[i]) || /\s/.test(parts[i])) &&
-        (/[a-zA-Z]/.test(parts[i + 1]) || /\s/.test(parts[i + 1]))
-      ) {
-        // Skip inserting ZWC if this is a markdown line and we're at the start
-        if (isMarkdownLine && i === 0) continue;
-
-        const count = zwcPerGap + (gapCount < remainder ? 1 : 0);
-        result.push(generateZwcString(count));
-        gapCount++;
-      }
-    }
-
-    return result.join("");
+    return parts.join("");
   });
 
   return processedLines.join("\n");
