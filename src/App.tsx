@@ -1,6 +1,7 @@
 import "../styles/globals.css";
 
 import { useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { Copy, Download, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,12 +9,14 @@ import { confusify, insertZeroWidthChars } from "./token-bomber";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Checkbox } from "./components/ui/checkbox";
+import { Slider } from "./components/ui/slider";
 
 export function App() {
   const [inputText, setInputText] = useState("");
   const [outputText, setOutputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [shouldConfusify, setShouldConfusify] = useState(false);
+  const [tokenCount, setTokenCount] = useState(1000000);
 
   // Function to copy text to clipboard
   const copyToClipboard = () => {
@@ -48,8 +51,19 @@ export function App() {
     URL.revokeObjectURL(url);
   };
 
+  // Format token count for display
+  function formatTokenCount(count: number) {
+    if (count >= 1000000) {
+      return (count / 1000000).toFixed(1) + "M";
+    } else if (count >= 1000) {
+      return (count / 1000).toFixed(0) + "K";
+    }
+    return count.toString();
+  }
+
   return (
     <div className="min-h-screen bg-[#101112] text-[#E1E1E2]">
+      <Analytics />
       <Toaster richColors />
       <div className="container max-w-4xl py-10 mx-auto px-4">
         <div className="mb-8">
@@ -75,37 +89,63 @@ export function App() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
             />
-            <Button
-              onClick={async () => {
-                setIsLoading(true);
-                const result = await insertZeroWidthChars(
-                  shouldConfusify ? confusify(inputText) : inputText
-                );
-                setOutputText(result);
-                setIsLoading(false);
-              }}
-              className="w-full bg-[#5E6AD2] hover:bg-[#4F5ABA] text-white rounded-md h-9 text-sm font-medium transition-colors"
-              disabled={!inputText}
-            >
-              {isLoading ? (
-                <Loader2 className="ml-2 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <>
-                  <span>Process</span>{" "}
-                  <ArrowRight className="ml-2 h-3.5 w-3.5" />
-                </>
-              )}
-            </Button>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={shouldConfusify}
-                onCheckedChange={(checked) =>
-                  setShouldConfusify(!!checked.valueOf())
-                }
-              />
-              <span className="text-sm text-[#8A8A8D]">
-                Confusify text with identical-looking unicode characters
-              </span>
+            <div className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-[#8A8A8D]">
+                    Token Count: {formatTokenCount(tokenCount)}
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="2500000"
+                    value={tokenCount}
+                    onChange={(e) => setTokenCount(Number(e.target.value))}
+                    className="w-24 text-sm bg-[#17181A] border border-[#27282A] rounded px-2 py-1 text-[#E1E1E2]"
+                  />
+                </div>
+                <Slider
+                  value={[tokenCount]}
+                  min={1000}
+                  max={2500000}
+                  step={1000}
+                  onValueChange={(value) => setTokenCount(value[0])}
+                  className="w-full"
+                />
+              </div>
+              <Button
+                onClick={async () => {
+                  setIsLoading(true);
+                  const result = await insertZeroWidthChars(
+                    shouldConfusify ? confusify(inputText) : inputText,
+                    tokenCount
+                  );
+                  setOutputText(result);
+                  setIsLoading(false);
+                }}
+                className="w-full bg-[#5E6AD2] hover:bg-[#4F5ABA] text-white rounded-md h-9 text-sm font-medium transition-colors"
+                disabled={!inputText}
+              >
+                {isLoading ? (
+                  <Loader2 className="ml-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <span>Process</span>{" "}
+                    <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                  </>
+                )}
+              </Button>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={shouldConfusify}
+                  onCheckedChange={(checked) =>
+                    setShouldConfusify(!!checked.valueOf())
+                  }
+                />
+                <span className="text-sm text-[#8A8A8D]">
+                  Obfuscate text with identical-looking unicode characters
+                </span>
+              </div>
             </div>
           </div>
 
